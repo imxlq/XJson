@@ -12,7 +12,7 @@ endif()
 project ("XJson")
 
 # 将源代码添加到此项目的可执行文件。
-add_executable (XJson "XJson.cpp" "XJson.h")
+add_executable (XJson "XJson.cpp" "XJson.h" "jsonBase/jsonValue.c" "jsonBase/jsonValue.h")
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET XJson PROPERTY CXX_STANDARD 20)
