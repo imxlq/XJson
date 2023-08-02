@@ -60,4 +60,8 @@ struct __json_member
     json_value_t value;
 };
 
+json_value_t *json_value_parse(const char *jsonStr);
+
+int __parser_json_value(const char *jsonStr, json_value_t *value);
+
 #endif // __JSON_VALUE_H__
