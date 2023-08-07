@@ -49,8 +49,10 @@ static int __parse_json_value(const char *cursor, const char **end, json_value_t
 static int __parse_json_number(const char *cursor, const char **end, double *num);
 static int __json_string_length(const char *cursor);
 static int __parse_json_string(const char *cursor, const char **end, char *str);
-static int __parse_json_array(const char *cursor, const char **end, json_value_t *val);
-static int __parse_json_object(const char *cursor, const char **end, json_value_t *val);
+static int __parse_json_array(const char *cursor, const char **end, json_array_t *array);
+static int __parse_json_object(const char *cursor, const char **end, json_object_t *obj);
+static int __parse_json_hex4(const char *cursor, const char **end, unsigned int *code);
+static int __parse_json_unicode(const char *cursor, const char **end, char *utf8);
 
 json_value_t *json_value_parse(const char *jsonStr)
 {
@@ -172,7 +174,7 @@ static int __parse_json_value(const char *cursor, const char **end, json_value_t
     }
     case '{':
     {
-        ret = __parse_json_object(cursor, val);
+        ret = __parse_json_object(cursor, &cursor, &val->value.object);
         if (ret < 0)
         {
             return ret;
@@ -338,4 +340,113 @@ static int __parse_json_string(const char *cursor, const char **end, char *str)
     *str = '\0';
     *end = cursor + 1;
     return 0;
+}
+
+static int __parse_json_hex4(const char *cursor, const char **end, unsigned int *code)
+{
+    int hex;
+    int i;
+
+    // 初始化code
+    *code = 0;
+    for (i = 0; i < 4; i++)
+    {
+        hex = *cursor;
+        if (hex >= '0' && hex <= '9')
+        {
+            hex = hex - '0';
+        }
+        else if (hex >= 'A' && hex <= 'F')
+        {
+            hex = hex - 'A' + 10;
+        }
+        else if (hex >= 'a' && hex <= 'f')
+        {
+            hex = hex - 'a' + 10;
+        }
+        else
+        {
+            return -2;
+        }
+
+        *code = (*code << 4) + hex;
+        cursor++;
+    }
+
+    *end = cursor;
+    return 0;
+}
+
+static int __parse_json_unicode(const char *cursor, const char **end, char *utf8)
+{
+    int ret;
+    unsigned int code;
+    unsigned int next;
+
+    ret = __parse_json_hex4(cursor, end, &code);
+    if (ret < 0)
+    {
+        return ret;
+    }
+
+    if (code >= 0xdc00 && code <= 0xdfff)
+    {
+        return -2;
+    }
+
+    if (code >= 0xd800 && code <= 0xdbff)
+    {
+        cursor = *end;
+        if (*cursor != '\\')
+        {
+            return -2;
+        }
+
+        cursor++;
+        if (*cursor != 'u')
+        {
+            return -2;
+        }
+
+        cursor++;
+        ret = __parse_json_hex4(cursor, end, &next);
+        if (ret < 0)
+        {
+            return ret;
+        }
+
+        if (next < 0xdc00 || next > 0xdfff)
+        {
+            return -2;
+        }
+
+        code = (((code & 0x3ff) << 10) | (next & 0x3ff)) + 0x10000;
+    }
+
+    if (code <= 0x7f)
+    {
+        utf8[0] = code;
+        return 1;
+    }
+    else if (code <= 0x7ff)
+    {
+        utf8[0] = 0xc0 | (code >> 6);
+        utf8[1] = 0x80 | (code & 0x3f);
+        return 2;
+    }
+    else if (code <= 0xffff)
+    {
+        utf8[0] = 0xe0 | (code >> 12);
+        utf8[1] = 0x80 | ((code >> 6) & 0x3f);
+        utf8[2] = 0x80 | (code & 0x3f);
+        return 3;
+    }
+    else
+    {
+        utf8[0] = 0xf0 | (code >> 18);
+        utf8[1] = 0x80 | ((code >> 12) & 0x3f);
+        utf8[2] = 0x80 | ((code >> 6) & 0x3f);
+        utf8[3] = 0x80 | (code & 0x3f);
+        return 4;
+    }
 }
