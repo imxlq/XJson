@@ -20,13 +20,13 @@ struct __json_array
 {
     int size;
 
-    json_element_t *head;
+    struct list_head head;
 };
 
 struct __json_element
 {
+    struct list_head list;
     json_value_t value;
-    json_element_t *next, *prev;
 };
 
 struct __json_object
