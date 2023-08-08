@@ -1,6 +1,8 @@
 #include "jsonValue.h"
 #include "stdio.h"
 
+#define JSON_DEPTH_LIMIT 1024
+
 typedef struct __json_member json_member_t;
 typedef struct __json_element json_element_t;
 
@@ -45,14 +47,15 @@ struct __json_member
     json_value_t value;
 };
 
-static int __parse_json_value(const char *cursor, const char **end, json_value_t *val);
+static int __parse_json_value(const char *cursor, const char **end, int depth, json_value_t *val);
 static int __parse_json_number(const char *cursor, const char **end, double *num);
 static int __json_string_length(const char *cursor);
 static int __parse_json_string(const char *cursor, const char **end, char *str);
-static int __parse_json_array(const char *cursor, const char **end, json_array_t *array);
+static int __parse_json_array(const char *cursor, const char **end, int depth, json_array_t *array);
 static int __parse_json_object(const char *cursor, const char **end, json_object_t *obj);
 static int __parse_json_hex4(const char *cursor, const char **end, unsigned int *code);
 static int __parse_json_unicode(const char *cursor, const char **end, char *utf8);
+static int __parse_json_elements(const char *cursor, const char **end, int depth, json_array_t *arr);
 
 json_value_t *json_value_parse(const char *jsonStr)
 {
@@ -77,7 +80,7 @@ json_value_t *json_value_parse(const char *jsonStr)
         jsonStr++;
     }
 
-    ret = __parse_json_value(jsonStr, &jsonStr, value);
+    ret = __parse_json_value(jsonStr, &jsonStr, 0, value);
     if (ret < 0)
     {
         return NULL;
@@ -86,7 +89,7 @@ json_value_t *json_value_parse(const char *jsonStr)
     return value;
 }
 
-static int __parse_json_value(const char *cursor, const char **end, json_value_t *val)
+static int __parse_json_value(const char *cursor, const char **end, int depth, json_value_t *val)
 {
     int ret = -1;
 
@@ -163,7 +166,7 @@ static int __parse_json_value(const char *cursor, const char **end, json_value_t
     }
     case '[':
     {
-        ret = __parse_json_array(cursor, end, &val->value.array);
+        ret = __parse_json_array(cursor, end, depth, &val->value.array);
         if (ret < 0)
         {
             return ret;
@@ -449,4 +452,88 @@ static int __parse_json_unicode(const char *cursor, const char **end, char *utf8
         utf8[3] = 0x80 | (code & 0x3f);
         return 4;
     }
+}
+
+static int __parse_json_array(const char *cursor, const char **end, int depth, json_array_t *arr)
+{
+    int ret;
+
+    if (depth == JSON_DEPTH_LIMIT)
+    {
+        return -3;
+    }
+
+    INIT_LIST_HEAD(&arr->head);
+
+    ret = __parse_json_elements(cursor, end, depth + 1, arr);
+    if (ret < 0)
+    {
+        __destroy_json_elements(arr);
+        return ret;
+    }
+
+    arr->size = ret;
+    return 0;
+}
+
+static int __parse_json_elements(const char *cursor, const char **end, int depth, json_array_t *arr)
+{
+    int ret;
+    int cnt = 0;
+    json_element_t *elem;
+
+    while (isspace(*cursor))
+    {
+        cursor++;
+    }
+
+    if (*cursor == ']')
+    {
+        *end = cursor + 1;
+        return 0;
+    }
+
+    while (1)
+    {
+        elem = (json_element_t *)malloc(sizeof(json_element_t));
+        if (elem == NULL)
+        {
+            return -1;
+        }
+
+        ret = __parse_json_value(cursor, &cursor, depth, &elem->value);
+        if (ret < 0)
+        {
+            free(elem);
+            return ret;
+        }
+
+        list_add_tail(&elem->list, &arr->head);
+        cnt++;
+
+        while (isspace(*cursor))
+        {
+            cursor++;
+        }
+
+        if (*cursor == ',')
+        {
+            cursor++;
+            while (isspace(*cursor))    
+            {
+                cursor++;
+            }
+        }
+        else if (*cursor == ']')
+        {
+            break;
+        }
+        else
+        {
+            return -2;
+        }
+    }
+
+    *end = cursor + 1;
+    return cnt;
 }
