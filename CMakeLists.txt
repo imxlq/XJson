@@ -1,21 +1,18 @@
-﻿# CMakeList.txt: XJson 的 CMake 项目，在此处包括源代码并定义
-# 项目特定的逻辑。
-#
-cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required(VERSION 3.5)
 
-# Enable Hot Reload for MSVC compilers if supported.
-if (POLICY CMP0141)
-  cmake_policy(SET CMP0141 NEW)
-  set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
-endif()
+project(
+  XJson
+)
 
-project ("XJson")
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
-# 将源代码添加到此项目的可执行文件。
-add_executable (XJson "XJson.cpp" "XJson.h" "jsonBase/jsonValue.c" "jsonBase/jsonValue.h")
+# set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
-if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET XJson PROPERTY CXX_STANDARD 20)
-endif()
+file(GLOB_RECURSE SRC_LIST ${PROJECT_SOURCE_DIR}/jsonBase/*.c)
+set(HEAD_DIR ${PROJECT_BINARY_DIR}/jsonBase)
 
-# TODO: 如有需要，请添加测试并安装目标。
+include_directories(${HEAD_DIR})
+add_library(${PROJECT_NAME} STATIC ${SRC_LIST})

@@ -1,10 +1,29 @@
 #include "jsonValue.h"
 #include "stdio.h"
+#include <stddef.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <string.h>
 
 #define JSON_DEPTH_LIMIT 1024
 
-typedef struct __json_member json_member_t;
 typedef struct __json_element json_element_t;
+typedef struct __json_member json_member_t;
+
+struct __json_array
+{
+    int size;
+
+    struct list_head head;
+};
+
+struct __json_object
+{
+    int size;
+
+    struct list_head head;
+    struct rb_root root;
+};
 
 struct __json_value
 {
@@ -18,32 +37,17 @@ struct __json_value
     } value;
 };
 
-struct __json_array
-{
-    int size;
-
-    struct list_head head;
-};
-
 struct __json_element
 {
     struct list_head list;
     json_value_t value;
 };
 
-struct __json_object
-{
-    int size;
-
-    struct list_head head;
-    struct rb_root root;
-};
-
 struct __json_member
 {
     struct list_head list;
     struct rb_node node;
-    char key[1];
+    char name[1];
     json_value_t value;
 };
 
@@ -52,10 +56,16 @@ static int __parse_json_number(const char *cursor, const char **end, double *num
 static int __json_string_length(const char *cursor);
 static int __parse_json_string(const char *cursor, const char **end, char *str);
 static int __parse_json_array(const char *cursor, const char **end, int depth, json_array_t *array);
-static int __parse_json_object(const char *cursor, const char **end, json_object_t *obj);
+static int __parse_json_object(const char *cursor, const char **end, int depth, json_object_t *obj);
 static int __parse_json_hex4(const char *cursor, const char **end, unsigned int *code);
 static int __parse_json_unicode(const char *cursor, const char **end, char *utf8);
 static int __parse_json_elements(const char *cursor, const char **end, int depth, json_array_t *arr);
+static int __parse_json_members(const char *cursor, const char **end, int depth, json_object_t *obj);
+static int __parse_json_member(const char *cursor, const char **end, int depth, json_member_t *memb);
+static int __insert_json_member(json_member_t *memb, struct list_head *pos, json_object_t *obj);
+static void __destroy_json_elements(json_array_t *arr);
+static void __destroy_json_value(json_value_t *val);
+static void __destroy_json_members(json_object_t *obj);
 
 json_value_t *json_value_parse(const char *jsonStr)
 {
@@ -119,7 +129,7 @@ static int __parse_json_value(const char *cursor, const char **end, int depth, j
     case '\"':
     {
         cursor++;
-        ret = __parse_json_length(cursor);
+        ret = __json_string_length(cursor);
         if (ret < 0)
         {
             return ret;
@@ -177,7 +187,7 @@ static int __parse_json_value(const char *cursor, const char **end, int depth, j
     }
     case '{':
     {
-        ret = __parse_json_object(cursor, &cursor, &val->value.object);
+        ret = __parse_json_object(cursor, end, depth, &val->value.object);
         if (ret < 0)
         {
             return ret;
@@ -224,37 +234,6 @@ static int __parse_json_number(const char *cursor, const char **end, double *num
     }
 
     return 0;
-}
-
-static int __json_string_length(const char *cursor)
-{
-    int len = 0;
-
-    while (1)
-    {
-        if (*cursor == '\"')
-            break;
-
-        if (*(const unsigned char *)cursor < ' ')
-        {
-            return -2;
-        }
-
-        cursor++;
-        if (cursor[-1] == '\\')
-        {
-            if (!*cursor)
-            {
-                return -2;
-            }
-
-            cursor++;
-        }
-
-        len++;
-    }
-
-    return len;
 }
 
 static int __json_string_length(const char *cursor)
@@ -519,7 +498,7 @@ static int __parse_json_elements(const char *cursor, const char **end, int depth
         if (*cursor == ',')
         {
             cursor++;
-            while (isspace(*cursor))    
+            while (isspace(*cursor))
             {
                 cursor++;
             }
@@ -536,4 +515,205 @@ static int __parse_json_elements(const char *cursor, const char **end, int depth
 
     *end = cursor + 1;
     return cnt;
+}
+
+static int __parse_json_object(const char *cursor, const char **end, int depth, json_object_t *obj)
+{
+    int ret;
+
+    if (depth == JSON_DEPTH_LIMIT)
+    {
+        return -3;
+    }
+
+    // 初始化链表和红黑树
+    INIT_LIST_HEAD(&obj->head);
+    obj->root.rb_node = NULL;
+
+    ret = __parse_json_members(cursor, end, depth + 1, obj);
+    if (ret < 0)
+    {
+        __destroy_json_members(obj);
+        return ret;
+    }
+
+    obj->size = ret;
+    return 0;
+}
+
+static int __parse_json_members(const char *cursor, const char **end, int depth, json_object_t *obj)
+{
+    int ret;
+    int cnt = 0;
+    json_member_t *memb;
+
+    while (isspace(*cursor))
+    {
+        cursor++;
+    }
+
+    if (*cursor == '}')
+    {
+        *end = cursor + 1;
+        return 0;
+    }
+
+    while (1)
+    {
+        if (*cursor != '\"')
+        {
+            return -2;
+        }
+
+        cursor++;
+        ret = __json_string_length(cursor);
+        if (ret < 0)
+        {
+            return ret;
+        }
+
+        memb = (json_member_t *)malloc(offsetof(json_member_t, name) + ret + 1);
+        if (memb == NULL)
+        {
+            return -1;
+        }
+
+        ret = __parse_json_member(cursor, &cursor, depth, memb);
+        if (ret < 0)
+        {
+            free(memb);
+            return ret;
+        }
+
+        __insert_json_member(memb, obj->head.prev, obj);
+        cnt++;
+
+        while (isspace(*cursor))
+        {
+            cursor++;
+        }
+
+        if (*cursor == ',')
+        {
+            cursor++;
+            while (isspace(*cursor))
+            {
+                cursor++;
+            }
+        }
+        else if (*cursor == '}')
+        {
+            break;
+        }
+        else
+        {
+            return -2;
+        }
+    }
+
+    *end = cursor + 1;
+    return cnt;
+}
+
+static int __parse_json_member(const char *cursor, const char **end, int depth, json_member_t *memb)
+{
+    int ret;
+
+    ret = __parse_json_string(cursor, &cursor, memb->name);
+    if (ret < 0)
+    {
+        return ret;
+    }
+
+    while (isspace(*cursor))
+    {
+        cursor++;
+    }
+
+    if (*cursor != ':')
+    {
+        return -2;
+    }
+
+    cursor++;
+    while (isspace(*cursor))
+    {
+        cursor++;
+    }
+
+    ret = __parse_json_value(cursor, &cursor, depth, &memb->value);
+    if (ret < 0)
+    {
+        return ret;
+    }
+
+    *end = cursor;
+    return 0;
+}
+
+static int __insert_json_member(json_member_t *memb, struct list_head *pos, json_object_t *obj)
+{
+    struct rb_node **p = &obj->root.rb_node;
+    struct rb_node *parent = NULL;
+    json_member_t *entry;
+
+    while (*p)
+    {
+        parent = *p;
+        entry = rb_entry(*p, json_member_t, node);
+        if (strcmp(memb->name, entry->name) < 0)
+        {
+            p = &(*p)->rb_left;
+        }
+        else
+        {
+            p = &(*p)->rb_right;
+        }
+    }
+
+    rb_link_node(&memb->node, parent, p);
+    rb_insert_color(&memb->node, &obj->root);
+    list_add(&memb->list, pos);
+}
+
+static void __destroy_json_elements(json_array_t *arr)
+{
+    struct list_head *pos, *tmp;
+    json_element_t *elem;
+
+    list_for_each_safe(pos, tmp, &arr->head)
+    {
+        elem = list_entry(pos, json_element_t, list);
+        __destroy_json_value(&elem->value);
+        free(elem);
+    }
+}
+
+static void __destroy_json_value(json_value_t *val)
+{
+    switch (val->type)
+    {
+    case JSON_VALUE_STRING:
+        free(val->value.string);
+        break;
+    case JSON_VALUE_ARRAY:
+        __destroy_json_elements(&val->value.array);
+        break;
+    case JSON_VALUE_OBJECT:
+        __destroy_json_members(&val->value.object);
+        break;
+    }
+}
+
+static void __destroy_json_members(json_object_t *obj)
+{
+    struct list_head *pos, *tmp;
+    json_member_t *memb;
+
+    list_for_each_safe(pos, tmp, &obj->head)
+    {
+        memb = list_entry(pos, json_member_t, list);
+        __destroy_json_value(&memb->value);
+        free(memb);
+    }
 }
