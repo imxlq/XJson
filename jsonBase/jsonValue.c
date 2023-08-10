@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <string.h>
+#include <math.h>
 
 #define JSON_DEPTH_LIMIT 1024
 
@@ -66,6 +67,11 @@ static int __insert_json_member(json_member_t *memb, struct list_head *pos, json
 static void __destroy_json_elements(json_array_t *arr);
 static void __destroy_json_value(json_value_t *val);
 static void __destroy_json_members(json_object_t *obj);
+
+static void __print_json_string(const char *str);
+static void __print_json_number(double num);
+static void __print_json_array(json_array_t *arr, int depth);
+static void __print_json_object(json_object_t *obj, int depth);
 
 json_value_t *json_value_parse(const char *jsonStr)
 {
@@ -716,4 +722,331 @@ static void __destroy_json_members(json_object_t *obj)
         __destroy_json_value(&memb->value);
         free(memb);
     }
+}
+
+void print_json_value(json_value_t *val, int depth)
+{
+    switch (json_value_type(val))
+    {
+    case JSON_VALUE_STRING:
+        __print_json_string(json_value_string(val));
+        break;
+    case JSON_VALUE_NUMBER:
+        __print_json_number(json_value_number(val));
+        break;
+    case JSON_VALUE_ARRAY:
+        __print_json_array(json_value_array(val), depth);
+        break;
+    case JSON_VALUE_OBJECT:
+        __print_json_object(json_value_object(val), depth);
+        break;
+    case JSON_VALUE_TRUE:
+        printf("true");
+        break;
+    case JSON_VALUE_FALSE:
+        printf("false");
+        break;
+    case JSON_VALUE_NULL:
+        printf("null");
+        break;
+    }
+}
+
+void json_value_destroy(json_value_t *val)
+{
+    __destroy_json_value(val);
+    free(val);
+}
+
+int json_value_type(const json_value_t *val)
+{
+    return val->type;
+}
+
+const char *json_value_string(const json_value_t *val)
+{
+    if (json_value_type(val) != JSON_VALUE_STRING)
+    {
+        return NULL;
+    }
+
+    return val->value.string;
+}
+
+double json_value_number(const json_value_t *val)
+{
+    if (json_value_type(val) != JSON_VALUE_NUMBER)
+    {
+        return NAN;
+    }
+
+    return val->value.number;
+}
+
+json_array_t *json_value_array(const json_value_t *val)
+{
+    if (json_value_type(val) != JSON_VALUE_ARRAY)
+    {
+        return NULL;
+    }
+
+    return (json_array_t *)&val->value.array;
+}
+
+json_object_t *json_value_object(const json_value_t *val)
+{
+    if (json_value_type(val) != JSON_VALUE_OBJECT)
+    {
+        return NULL;
+    }
+
+    return (json_object_t *)&val->value.object;
+}
+
+static void __print_json_string(const char *str)
+{
+    printf("\"");
+
+    while (*str)
+    {
+        switch (*str)
+        {
+        case '\r':
+            printf("\\r");
+            break;
+        case '\n':
+            printf("\\n");
+            break;
+        case '\t':
+            printf("\\t");
+            break;
+        case '\b':
+            printf("\\b");
+            break;
+        case '\f':
+            printf("\\f");
+            break;
+        case '\\':
+            printf("\\\\");
+            break;
+        case '\"':
+            printf("\\\"");
+            break;
+        default:
+            printf("%c", *str);
+            break;
+        }
+        str++;
+    }
+
+    printf("\"");
+}
+
+static void __print_json_number(double num)
+{
+    long long integer = (long long)num;
+
+    if (num == integer)
+    {
+        printf("%lld", integer);
+    }
+    else
+    {
+        printf("%lf", num);
+    }
+}
+
+static void __print_json_array(json_array_t *arr, int depth)
+{
+    const json_value_t *val;
+    int n = 0;
+    int i;
+
+    printf("[\n");
+    json_array_for_each(val, arr)
+    {
+        if (n != 0)
+        {
+            printf(",\n");
+        }
+
+        n++;
+        for (i = 0; i < depth; i++)
+        {
+            printf("  ");
+        }
+        print_json_value(val, depth + 1);
+    }
+
+    printf("\n");
+    for (i = 0; i < depth; i++)
+    {
+        printf("  ");
+    }
+
+    printf("]");
+}
+
+int json_array_size(const json_array_t *arr)
+{
+    return arr->size;
+}
+
+const json_value_t *json_array_next_value(const json_value_t *val, const json_array_t *arr)
+{
+    const struct list_head *pos;
+
+    if (val)
+    {
+        pos = &list_entry(val, json_element_t, list)->list;
+    }
+    else
+    {
+        pos = &arr->head;
+    }
+
+    if (pos->next == &arr->head)
+    {
+        return NULL;
+    }
+
+    return &list_entry(pos->next, json_element_t, list)->value;
+}
+
+const json_value_t *json_array_prev_value(const json_value_t *val, const json_array_t *arr)
+{
+    const struct list_head *pos;
+
+    if (val)
+    {
+        pos = &list_entry(val, json_element_t, list)->list;
+    }
+    else
+    {
+        pos = &arr->head;
+    }
+
+    if (pos->prev == &arr->head)
+    {
+        return NULL;
+    }
+
+    return &list_entry(pos->prev, json_element_t, list)->value;
+}
+
+static void __print_json_object(json_object_t *obj, int depth)
+{
+    const char *name;
+    const json_value_t *val;
+    int n = 0;
+    int i;
+
+    printf("{\n");
+    json_object_for_each(name, val, obj)
+    {
+        if (n != 0)
+        {
+            printf(",\n");
+        }
+
+        n++;
+        for (i = 0; i < depth; i++)
+        {
+            printf("  ");
+        }
+        printf("\"%s\": ", name);
+        print_json_value(val, depth + 1);
+    }
+
+    printf("\n");
+    for (i = 0; i < depth; i++)
+    {
+        printf("  ");
+    }
+
+    printf("}");
+}
+
+const char *json_object_next_name(const char *name, const json_object_t *obj)
+{
+    const struct list_head *pos;
+
+    if (name)
+    {
+        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+    }
+    else
+    {
+        pos = &obj->head;
+    }
+
+    if (pos->next == &obj->head)
+    {
+        return NULL;
+    }
+
+    return list_entry(pos->next, json_member_t, list)->name;
+}
+
+const char *json_object_prev_name(const char *name, const json_object_t *obj)
+{
+    const struct list_head *pos;
+
+    if (name)
+    {
+        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+    }
+    else
+    {
+        pos = &obj->head;
+    }
+
+    if (pos->prev == &obj->head)
+    {
+        return NULL;
+    }
+
+    return list_entry(pos->prev, json_member_t, list)->name;
+}
+
+const json_value_t *json_object_next_value(const char *name, const json_object_t *obj)
+{
+    const struct list_head *pos;
+
+    if (name)
+    {
+        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+    }
+    else
+    {
+        pos = &obj->head;
+    }
+
+    if (pos->next == &obj->head)
+    {
+        return NULL;
+    }
+
+    return &list_entry(pos->next, json_member_t, list)->value;
+}
+
+const json_value_t *json_object_prev_value(const char *name, const json_object_t *obj)
+{
+    const struct list_head *pos;
+
+    if (name)
+    {
+        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+    }
+    else
+    {
+        pos = &obj->head;
+    }
+
+    if (pos->prev == &obj->head)
+    {
+        return NULL;
+    }
+
+    return &list_entry(pos->prev, json_member_t, list)->value;
 }

@@ -16,10 +16,50 @@ typedef struct __json_value json_value_t;
 typedef struct __json_object json_object_t;
 typedef struct __json_array json_array_t;
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
+    json_value_t *json_value_parse(const char *jsonStr);
+    void print_json_value(json_value_t *val, int depth);
+    void json_value_destroy(json_value_t *val);
 
-json_value_t *json_value_parse(const char *jsonStr);
+    int json_value_type(const json_value_t *val);
+    const char *json_value_string(const json_value_t *val);
+    double json_value_number(const json_value_t *val);
+    json_array_t *json_value_array(const json_value_t *val);
+    json_object_t *json_value_object(const json_value_t *val);
 
+    int json_array_size(const json_array_t *arr);
+    const json_value_t *json_array_next_value(const json_value_t *val, const json_array_t *arr);
+    const json_value_t *json_array_prev_value(const json_value_t *val, const json_array_t *arr);
 
+    int json_object_size(const json_object_t *obj);
+    const char *json_object_next_name(const char *name, const json_object_t *obj);
+    const char *json_object_prev_name(const char *name, const json_object_t *obj);
+    const json_value_t *json_object_next_value(const char *name, const json_object_t *obj);
+    const json_value_t *json_object_prev_value(const char *name, const json_object_t *obj);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define json_array_for_each(val, arr) \
+    for (val = NULL; val = json_array_next_value(val, arr), val;)
+#define json_array_for_each_prev(val, arr) \
+    for (val = NULL; val = json_array_prev_value(val, arr), val;)
+
+#define json_object_for_each(name, val, obj)      \
+    for (name = NULL, val = NULL;                 \
+         name = json_object_next_name(name, obj), \
+        val = json_object_next_value(name, obj),  \
+        val;)
+
+#define json_object_for_each_prev(name, val, obj) \
+    for (name = NULL, val = NULL;                 \
+         name = json_object_prev_name(name, obj), \
+        val = json_object_prev_value(name, obj),  \
+        val;)
 
 #endif // __JSON_VALUE_H__
