@@ -1,8 +1,8 @@
 #pragma once
 #ifndef __JSON_VALUE_H__
 #define __JSON_VALUE_H__
-#include "list.h"
-#include "rbtree.h"
+
+#include <stddef.h>
 
 #define JSON_VALUE_STRING 1
 #define JSON_VALUE_NUMBER 2

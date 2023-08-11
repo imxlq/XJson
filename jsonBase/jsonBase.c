@@ -5,8 +5,10 @@
 #include <ctype.h>
 #include <string.h>
 #include <math.h>
+#include "list.h"
+#include "rbtree.h"
 
-#define JSON_DEPTH_LIMIT 1024
+#define JSON_DEPTH_LIMIT 1020
 
 typedef struct __json_element json_element_t;
 typedef struct __json_member json_member_t;
