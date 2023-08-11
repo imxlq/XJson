@@ -1,4 +1,4 @@
-#include "jsonValue.h"
+#include "jsonBase.h"
 #include "stdio.h"
 #include <stddef.h>
 #include <stdlib.h>
@@ -48,8 +48,8 @@ struct __json_member
 {
     struct list_head list;
     struct rb_node node;
-    char name[1];
     json_value_t value;
+    char name[1];
 };
 
 static int __parse_json_value(const char *cursor, const char **end, int depth, json_value_t *val);
@@ -84,21 +84,28 @@ json_value_t *json_value_parse(const char *jsonStr)
         return NULL;
     }
 
-    if (jsonStr == NULL)
-    {
-        free(value);
-        value = NULL;
-        return NULL;
-    }
-
     while (isspace(*jsonStr))
     {
         jsonStr++;
     }
 
     ret = __parse_json_value(jsonStr, &jsonStr, 0, value);
+    if (ret >= 0)
+    {
+        while (isspace(*jsonStr))
+        {
+            jsonStr++;
+        }
+
+        if (*jsonStr)
+        {
+            __destroy_json_value(value);
+            ret = -2;
+        }
+    }
     if (ret < 0)
     {
+        free(value);
         return NULL;
     }
 
@@ -182,6 +189,7 @@ static int __parse_json_value(const char *cursor, const char **end, int depth, j
     }
     case '[':
     {
+        cursor++;
         ret = __parse_json_array(cursor, end, depth, &val->value.array);
         if (ret < 0)
         {
@@ -193,6 +201,7 @@ static int __parse_json_value(const char *cursor, const char **end, int depth, j
     }
     case '{':
     {
+        cursor++;
         ret = __parse_json_object(cursor, end, depth, &val->value.object);
         if (ret < 0)
         {
@@ -257,8 +266,13 @@ static int __json_string_length(const char *cursor)
         }
 
         cursor++;
-        if (*cursor == '\\')
+        if (cursor[-1] == '\\')
         {
+            if (!*cursor)
+            {
+                return -2;
+            }
+
             cursor++;
         }
 
@@ -724,7 +738,7 @@ static void __destroy_json_members(json_object_t *obj)
     }
 }
 
-void print_json_value(json_value_t *val, int depth)
+void print_json_value(const json_value_t *val, int depth)
 {
     switch (json_value_type(val))
     {
@@ -749,6 +763,11 @@ void print_json_value(json_value_t *val, int depth)
     case JSON_VALUE_NULL:
         printf("null");
         break;
+    }
+
+    if (depth == 0)
+    {
+        printf("\n");
     }
 }
 
@@ -871,7 +890,7 @@ static void __print_json_array(json_array_t *arr, int depth)
         }
 
         n++;
-        for (i = 0; i < depth; i++)
+        for (i = 0; i < depth + 1; i++)
         {
             printf("  ");
         }
@@ -898,7 +917,7 @@ const json_value_t *json_array_next_value(const json_value_t *val, const json_ar
 
     if (val)
     {
-        pos = &list_entry(val, json_element_t, list)->list;
+        pos = &list_entry(val, json_element_t, value)->list;
     }
     else
     {
@@ -919,7 +938,7 @@ const json_value_t *json_array_prev_value(const json_value_t *val, const json_ar
 
     if (val)
     {
-        pos = &list_entry(val, json_element_t, list)->list;
+        pos = &list_entry(val, json_element_t, value)->list;
     }
     else
     {
@@ -950,7 +969,7 @@ static void __print_json_object(json_object_t *obj, int depth)
         }
 
         n++;
-        for (i = 0; i < depth; i++)
+        for (i = 0; i < depth + 1; i++)
         {
             printf("  ");
         }
@@ -973,7 +992,7 @@ const char *json_object_next_name(const char *name, const json_object_t *obj)
 
     if (name)
     {
-        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+        pos = &list_entry(name, json_member_t, name)->list;
     }
     else
     {
@@ -994,7 +1013,7 @@ const char *json_object_prev_name(const char *name, const json_object_t *obj)
 
     if (name)
     {
-        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+        pos = &list_entry(name, json_member_t, name)->list;
     }
     else
     {
@@ -1009,13 +1028,13 @@ const char *json_object_prev_name(const char *name, const json_object_t *obj)
     return list_entry(pos->prev, json_member_t, list)->name;
 }
 
-const json_value_t *json_object_next_value(const char *name, const json_object_t *obj)
+const json_value_t *json_object_next_value(const json_value_t *val, const json_object_t *obj)
 {
     const struct list_head *pos;
 
-    if (name)
+    if (val)
     {
-        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+        pos = &list_entry(val, json_member_t, value)->list;
     }
     else
     {
@@ -1030,13 +1049,13 @@ const json_value_t *json_object_next_value(const char *name, const json_object_t
     return &list_entry(pos->next, json_member_t, list)->value;
 }
 
-const json_value_t *json_object_prev_value(const char *name, const json_object_t *obj)
+const json_value_t *json_object_prev_value(const json_value_t *val, const json_object_t *obj)
 {
     const struct list_head *pos;
 
-    if (name)
+    if (val)
     {
-        pos = &list_entry(json_object_find(name, obj), json_member_t, list)->list;
+        pos = &list_entry(val, json_member_t, value)->list;
     }
     else
     {
@@ -1049,4 +1068,25 @@ const json_value_t *json_object_prev_value(const char *name, const json_object_t
     }
 
     return &list_entry(pos->prev, json_member_t, list)->value;
+}
+
+const json_value_t *json_object_find(const char *name, const json_object_t *obj)
+{
+    struct rb_node *p = obj->root.rb_node;
+    json_member_t *memb;
+    int n;
+
+    while (p)
+    {
+        memb = rb_entry(p, json_member_t, node);
+        n = strcmp(name, memb->name);
+        if (n < 0)
+            p = p->rb_left;
+        else if (n > 0)
+            p = p->rb_right;
+        else
+            return &memb->value;
+    }
+
+    return NULL;
 }
