@@ -1108,6 +1108,7 @@ const json_value_t *json_array_insert_after(const json_value_t *val, json_array_
 
     return val;
 }
+
 const json_value_t *json_array_insert_before(const json_value_t *val, json_array_t *arr, int type, ...)
 {
     struct list_head *pos;
