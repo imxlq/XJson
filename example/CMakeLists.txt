@@ -1,5 +1,5 @@
 set(XJSON_EXAMPLES
-    jsonPrintExample
+    xjsonPrintExample
 )
 
 foreach(target ${XJSON_EXAMPLES})
