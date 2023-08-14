@@ -34,6 +34,10 @@ extern "C"
     int json_array_size(const json_array_t *arr);
     const json_value_t *json_array_next_value(const json_value_t *val, const json_array_t *arr);
     const json_value_t *json_array_prev_value(const json_value_t *val, const json_array_t *arr);
+    const json_value_t *json_array_append(json_array_t *arr, int type, ...);
+    const json_value_t *json_array_insert_after(const json_value_t *val, json_array_t *arr, int type, ...);
+    const json_value_t *json_array_insert_before(const json_value_t *val, json_array_t *arr, int type, ...);
+    json_value_t *json_array_remove(const json_value_t *val, json_array_t *arr);
 
     int json_object_size(const json_object_t *obj);
     const char *json_object_next_name(const char *name, const json_object_t *obj);
@@ -41,6 +45,10 @@ extern "C"
     const json_value_t *json_object_next_value(const json_value_t *val, const json_object_t *obj);
     const json_value_t *json_object_prev_value(const json_value_t *val, const json_object_t *obj);
     const json_value_t *json_object_find(const char *name, const json_object_t *obj);
+    const json_value_t *json_object_append(json_object_t *obj, const char *name, int type, ...);
+    const json_value_t *json_object_insert_after(const json_value_t *val, json_object_t *obj, const char *name, int type, ...);
+    const json_value_t *json_object_insert_before(const json_value_t *val, json_object_t *obj, const char *name, int type, ...);
+    json_value_t *json_object_remove(const json_value_t *val, json_object_t *obj);
 
 #ifdef __cplusplus
 }
