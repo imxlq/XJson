@@ -1,4 +1,4 @@
-#include "jsonBase.h"
+#include "xjsonBase.h"
 #include <string.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -119,6 +119,30 @@ json_value_t *json_value_parse(const char *jsonStr)
     }
 
     return value;
+}
+
+json_value_t *json_value_create(int type, ...)
+{
+    json_value_t *val;
+    va_list ap;
+    int ret;
+
+    val = (json_value_t *)malloc(sizeof(json_value_t));
+    if (val == NULL)
+    {
+        return NULL;
+    }
+
+    va_start(ap, type);
+    ret = __set_json_value(type, ap, val);
+    va_end(ap);
+    if (ret < 0)
+    {
+        free(val);
+        return NULL;
+    }
+
+    return val;
 }
 
 static int __parse_json_value(const char *cursor, const char **end, int depth, json_value_t *val)

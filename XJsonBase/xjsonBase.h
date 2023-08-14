@@ -22,6 +22,7 @@ extern "C"
 #endif
 
     json_value_t *json_value_parse(const char *jsonStr);
+    json_value_t *json_value_create(int type, ...);
     void print_json_value(const json_value_t *val, int depth);
     void json_value_destroy(json_value_t *val);
 
